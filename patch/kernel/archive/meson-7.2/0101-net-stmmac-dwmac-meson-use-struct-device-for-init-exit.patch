@@ -1,0 +1,44 @@
+From: MXQ edge port <nobody@localhost>
+Subject: net: stmmac: dwmac-meson: use struct device for init/exit
+
+Linux 7.2 plat_stmmacenet_data.init/exit take struct device *, not
+struct platform_device *. Adapt meson6_dwmac_{init,exit} accordingly.
+
+--- a/drivers/net/ethernet/stmicro/stmmac/dwmac-meson.c
++++ b/drivers/net/ethernet/stmicro/stmmac/dwmac-meson.c
+@@ -60,7 +60,7 @@
+ 	return 0;
+ }
+ 
+-static int meson6_dwmac_init(struct platform_device *pdev, void *priv)
++static int meson6_dwmac_init(struct device *dev, void *priv)
+ {
+ 	struct meson_dwmac *dwmac = priv;
+ 	u32 val;
+@@ -86,7 +86,7 @@
+ 	return 0;
+ }
+ 
+-static void meson6_dwmac_exit(struct platform_device *pdev, void *priv)
++static void meson6_dwmac_exit(struct device *dev, void *priv)
+ {
+ 	struct meson_dwmac *dwmac = priv;
+ 
+@@ -127,7 +127,7 @@
+ 	plat_dat->exit = meson6_dwmac_exit;
+ 	plat_dat->set_clk_tx_rate = meson6_dwmac_set_clk_tx_rate;
+ 
+-	ret = meson6_dwmac_init(pdev, dwmac);
++	ret = meson6_dwmac_init(&pdev->dev, dwmac);
+ 	if (ret)
+ 		return ret;
+ 
+@@ -138,7 +138,7 @@
+ 	return 0;
+ 
+ err_exit_dwmac:
+-	meson6_dwmac_exit(pdev, dwmac);
++	meson6_dwmac_exit(&pdev->dev, dwmac);
+ 	return ret;
+ }
+ 
