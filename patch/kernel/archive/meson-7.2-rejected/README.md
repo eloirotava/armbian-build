@@ -7,3 +7,7 @@ Eth RMII clock tree (0018) and mpeg_rtc (0025) were rewritten as
 
 CVBS PHY (0007) skipped for now (MXQ is HDMI). MMC/WiFi/timer/xhci
 WiPs left out until needed.
+
+Also already present in linux-7.2.y (Armbian fails on reverse-apply):
+- 0001-mmc-meson-mx-sdhc-Use-devm_mmc_alloc_host-helper
+- 0090-wifi-rtw88-re-enable-AP-and-ad-hoc-interface-modes
