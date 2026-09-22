@@ -1,0 +1,225 @@
+From: MXQ edge port <nobody@localhost>
+Subject: drm/meson: fix TranSwitch HDMI for linux-7.2 DRM bridge API
+
+Adapt meson_transwitch_hdmi.c to 7.2:
+- DRM_OUTPUT_COLOR_FORMAT_* rename
+- atomic_* take drm_atomic_commit
+- detect(bridge, connector)
+- typed HDMI infoframe ops
+- hdmi_audio_* argument order (bridge, connector, ...)
+
+diff --git a/drivers/gpu/drm/meson/meson_transwitch_hdmi.c b/drivers/gpu/drm/meson/meson_transwitch_hdmi.c
+index ecd575957..b1486cfcb 100644
+--- a/drivers/gpu/drm/meson/meson_transwitch_hdmi.c
++++ b/drivers/gpu/drm/meson/meson_transwitch_hdmi.c
+@@ -430,36 +430,36 @@ meson_txc_hdmi_bridge_atomic_get_output_bus_fmts(struct drm_bridge *bridge,
+ 	output_fmts[i++] = MEDIA_BUS_FMT_RGB888_1X24;
+ 
+ 	if (max_bpc >= 16 && info->bpc == 16) {
+-		if (info->color_formats & DRM_COLOR_FORMAT_YCBCR444)
++		if (info->color_formats & DRM_OUTPUT_COLOR_FORMAT_YCBCR444)
+ 			output_fmts[i++] = MEDIA_BUS_FMT_YUV16_1X48;
+ 
+ 		output_fmts[i++] = MEDIA_BUS_FMT_RGB161616_1X48;
+ 	}
+ 
+ 	if (max_bpc >= 12 && info->bpc >= 12) {
+-		if (info->color_formats & DRM_COLOR_FORMAT_YCBCR422)
++		if (info->color_formats & DRM_OUTPUT_COLOR_FORMAT_YCBCR422)
+ 			output_fmts[i++] = MEDIA_BUS_FMT_UYVY12_1X24;
+ 
+-		if (info->color_formats & DRM_COLOR_FORMAT_YCBCR444)
++		if (info->color_formats & DRM_OUTPUT_COLOR_FORMAT_YCBCR444)
+ 			output_fmts[i++] = MEDIA_BUS_FMT_YUV12_1X36;
+ 
+ 		output_fmts[i++] = MEDIA_BUS_FMT_RGB121212_1X36;
+ 	}
+ 
+ 	if (max_bpc >= 10 && info->bpc >= 10) {
+-		if (info->color_formats & DRM_COLOR_FORMAT_YCBCR422)
++		if (info->color_formats & DRM_OUTPUT_COLOR_FORMAT_YCBCR422)
+ 			output_fmts[i++] = MEDIA_BUS_FMT_UYVY10_1X20;
+ 
+-		if (info->color_formats & DRM_COLOR_FORMAT_YCBCR444)
++		if (info->color_formats & DRM_OUTPUT_COLOR_FORMAT_YCBCR444)
+ 			output_fmts[i++] = MEDIA_BUS_FMT_YUV10_1X30;
+ 
+ 		output_fmts[i++] = MEDIA_BUS_FMT_RGB101010_1X30;
+ 	}
+ 
+-	if (info->color_formats & DRM_COLOR_FORMAT_YCBCR422)
++	if (info->color_formats & DRM_OUTPUT_COLOR_FORMAT_YCBCR422)
+ 		output_fmts[i++] = MEDIA_BUS_FMT_UYVY8_1X16;
+ 
+-	if (info->color_formats & DRM_COLOR_FORMAT_YCBCR444)
++	if (info->color_formats & DRM_OUTPUT_COLOR_FORMAT_YCBCR444)
+ 		output_fmts[i++] = MEDIA_BUS_FMT_YUV8_1X24;
+ 
+ 	*num_output_fmts = i;
+@@ -567,7 +567,7 @@ meson_txc_hdmi_bridge_atomic_get_input_bus_fmts(struct drm_bridge *bridge,
+ }
+ 
+ static void meson_txc_hdmi_bridge_atomic_enable(struct drm_bridge *bridge,
+-						struct drm_atomic_state *state)
++						struct drm_atomic_commit *state)
+ {
+ 	struct meson_txc_hdmi *priv = bridge_to_meson_txc_hdmi(bridge);
+ 	struct drm_connector_state *conn_state;
+@@ -706,7 +706,7 @@ static void meson_txc_hdmi_bridge_atomic_enable(struct drm_bridge *bridge,
+ }
+ 
+ static void meson_txc_hdmi_bridge_atomic_disable(struct drm_bridge *bridge,
+-						 struct drm_atomic_state *state)
++						 struct drm_atomic_commit *state)
+ {
+ 	struct meson_txc_hdmi *priv = bridge_to_meson_txc_hdmi(bridge);
+ 
+@@ -738,7 +738,8 @@ meson_txc_hdmi_bridge_mode_valid(struct drm_bridge *bridge,
+ 	return bridge->funcs->hdmi_tmds_char_rate_valid(bridge, mode, rate);
+ }
+ 
+-static enum drm_connector_status meson_txc_hdmi_bridge_detect(struct drm_bridge *bridge)
++static enum drm_connector_status meson_txc_hdmi_bridge_detect(struct drm_bridge *bridge,
++							       struct drm_connector *connector)
+ {
+ 	struct meson_txc_hdmi *priv = bridge_to_meson_txc_hdmi(bridge);
+ 
+@@ -857,8 +858,8 @@ static void meson_txc_hdmi_infoframe_set(struct drm_bridge *bridge,
+ 	regmap_write(priv->regmap, tx_pkt_reg + 0x1f, enable ? 0xff : 0x00);
+ }
+ 
+-static int meson_txc_hdmi_clear_infoframe(struct drm_bridge *bridge,
+-					  enum hdmi_infoframe_type type)
++static int meson_txc_hdmi_clear_infoframe_type(struct drm_bridge *bridge,
++						enum hdmi_infoframe_type type)
+ {
+ 	u8 buffer[HDMI_INFOFRAME_HEADER_SIZE] = { 0 };
+ 
+@@ -868,15 +869,63 @@ static int meson_txc_hdmi_clear_infoframe(struct drm_bridge *bridge,
+ 	return 0;
+ }
+ 
+-static int meson_txc_hdmi_write_infoframe(struct drm_bridge *bridge,
+-					  enum hdmi_infoframe_type type,
+-					  const u8 *buffer, size_t len)
++static int meson_txc_hdmi_write_infoframe_type(struct drm_bridge *bridge,
++					       enum hdmi_infoframe_type type,
++					       const u8 *buffer, size_t len)
+ {
+ 	meson_txc_hdmi_infoframe_set(bridge, type, buffer, len, true);
+ 
+ 	return 0;
+ }
+ 
++static int meson_txc_hdmi_clear_avi_infoframe(struct drm_bridge *bridge)
++{
++	return meson_txc_hdmi_clear_infoframe_type(bridge, HDMI_INFOFRAME_TYPE_AVI);
++}
++
++static int meson_txc_hdmi_write_avi_infoframe(struct drm_bridge *bridge,
++					      const u8 *buffer, size_t len)
++{
++	return meson_txc_hdmi_write_infoframe_type(bridge, HDMI_INFOFRAME_TYPE_AVI,
++						   buffer, len);
++}
++
++static int meson_txc_hdmi_clear_hdmi_infoframe(struct drm_bridge *bridge)
++{
++	return meson_txc_hdmi_clear_infoframe_type(bridge, HDMI_INFOFRAME_TYPE_VENDOR);
++}
++
++static int meson_txc_hdmi_write_hdmi_infoframe(struct drm_bridge *bridge,
++					       const u8 *buffer, size_t len)
++{
++	return meson_txc_hdmi_write_infoframe_type(bridge, HDMI_INFOFRAME_TYPE_VENDOR,
++						   buffer, len);
++}
++
++static int meson_txc_hdmi_clear_spd_infoframe(struct drm_bridge *bridge)
++{
++	return meson_txc_hdmi_clear_infoframe_type(bridge, HDMI_INFOFRAME_TYPE_SPD);
++}
++
++static int meson_txc_hdmi_write_spd_infoframe(struct drm_bridge *bridge,
++					      const u8 *buffer, size_t len)
++{
++	return meson_txc_hdmi_write_infoframe_type(bridge, HDMI_INFOFRAME_TYPE_SPD,
++						   buffer, len);
++}
++
++static int meson_txc_hdmi_clear_audio_infoframe(struct drm_bridge *bridge)
++{
++	return meson_txc_hdmi_clear_infoframe_type(bridge, HDMI_INFOFRAME_TYPE_AUDIO);
++}
++
++static int meson_txc_hdmi_write_audio_infoframe(struct drm_bridge *bridge,
++						const u8 *buffer, size_t len)
++{
++	return meson_txc_hdmi_write_infoframe_type(bridge, HDMI_INFOFRAME_TYPE_AUDIO,
++						   buffer, len);
++}
++
+ static u32 meson_txc_hdmi_hdmi_codec_calc_audio_n(struct hdmi_codec_params *hparms)
+ {
+ 	u32 audio_n;
+@@ -907,8 +956,8 @@ static u8 meson_txc_hdmi_hdmi_codec_coding_type(struct hdmi_codec_params *hparms
+ 	}
+ }
+ 
+-static int meson_txc_hdmi_audio_prepare(struct drm_connector *connector,
+-					struct drm_bridge *bridge,
++static int meson_txc_hdmi_audio_prepare(struct drm_bridge *bridge,
++					struct drm_connector *connector,
+ 					struct hdmi_codec_daifmt *fmt,
+ 					struct hdmi_codec_params *hparms)
+ {
+@@ -1031,8 +1080,8 @@ static int meson_txc_hdmi_audio_prepare(struct drm_connector *connector,
+ 								       &hparms->cea);
+ }
+ 
+-static int meson_txc_hdmi_audio_mute_stream(struct drm_connector *connector,
+-					    struct drm_bridge *bridge,
++static int meson_txc_hdmi_audio_mute_stream(struct drm_bridge *bridge,
++					    struct drm_connector *connector,
+ 					    bool enable, int direction)
+ {
+ 	struct meson_txc_hdmi *priv = bridge_to_meson_txc_hdmi(bridge);
+@@ -1043,8 +1092,8 @@ static int meson_txc_hdmi_audio_mute_stream(struct drm_connector *connector,
+ 	return 0;
+ }
+ 
+-static int meson_txc_hdmi_audio_startup(struct drm_connector *connector,
+-					struct drm_bridge *bridge)
++static int meson_txc_hdmi_audio_startup(struct drm_bridge *bridge,
++					struct drm_connector *connector)
+ {
+ 	struct meson_txc_hdmi *priv = bridge_to_meson_txc_hdmi(bridge);
+ 
+@@ -1076,8 +1125,8 @@ static int meson_txc_hdmi_audio_startup(struct drm_connector *connector,
+ 	return 0;
+ }
+ 
+-static void meson_txc_hdmi_audio_shutdown(struct drm_connector *connector,
+-					  struct drm_bridge *bridge)
++static void meson_txc_hdmi_audio_shutdown(struct drm_bridge *bridge,
++					  struct drm_connector *connector)
+ {
+ 	struct meson_txc_hdmi *priv = bridge_to_meson_txc_hdmi(bridge);
+ 
+@@ -1104,8 +1153,14 @@ static const struct drm_bridge_funcs meson_txc_hdmi_bridge_funcs = {
+ 	.detect = meson_txc_hdmi_bridge_detect,
+ 	.edid_read = meson_txc_hdmi_bridge_edid_read,
+ 	.hdmi_tmds_char_rate_valid = meson_txc_hdmi_tmds_char_rate_valid,
+-	.hdmi_write_infoframe = meson_txc_hdmi_write_infoframe,
+-	.hdmi_clear_infoframe = meson_txc_hdmi_clear_infoframe,
++	.hdmi_write_avi_infoframe = meson_txc_hdmi_write_avi_infoframe,
++	.hdmi_clear_avi_infoframe = meson_txc_hdmi_clear_avi_infoframe,
++	.hdmi_write_hdmi_infoframe = meson_txc_hdmi_write_hdmi_infoframe,
++	.hdmi_clear_hdmi_infoframe = meson_txc_hdmi_clear_hdmi_infoframe,
++	.hdmi_write_spd_infoframe = meson_txc_hdmi_write_spd_infoframe,
++	.hdmi_clear_spd_infoframe = meson_txc_hdmi_clear_spd_infoframe,
++	.hdmi_write_audio_infoframe = meson_txc_hdmi_write_audio_infoframe,
++	.hdmi_clear_audio_infoframe = meson_txc_hdmi_clear_audio_infoframe,
+ 	.hdmi_audio_prepare = meson_txc_hdmi_audio_prepare,
+ 	.hdmi_audio_mute_stream = meson_txc_hdmi_audio_mute_stream,
+ 	.hdmi_audio_startup = meson_txc_hdmi_audio_startup,
