@@ -1,11 +1,9 @@
-# meson-7.2 rejected patches (from meson-6.12)
+# Not applied on linux-7.2.y
 
-These failed `patch -p1 -N` against `linux-7.2.y` after the applying set.
-They are kept here for porting; Armbian does not read this directory.
+These patches from domin144 meson-6.16 failed dry-apply on 7.2.7.
 
-Failed (12):
-- DRM/HDMI: 0016, 0047, 0052, 0053, 0057
-- Ethernet/clk: 0018, 0020, 0023, 0024, 0026, 0027
-- PWM revert: generic-Revert-pwm-meson-...
+Eth RMII clock tree (0018) and mpeg_rtc (0025) were rewritten as
+`../meson-7.2/0099-meson8b-eth-rmii-and-mpeg-rtc-clocks-for-7.2.patch`.
 
-First GHA target: the 41 patches in `../meson-7.2/` that apply cleanly.
+CVBS PHY (0007) skipped for now (MXQ is HDMI). MMC/WiFi/timer/xhci
+WiPs left out until needed.

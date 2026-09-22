@@ -1,0 +1,200 @@
+From: Armbian MXQ edge port <nobody@localhost>
+Subject: meson8b: port Ethernet RMII clock tree and mpeg_rtc_osc_sel for 7.2
+
+Refreshed from Martin Blumenstingl's meson-mx series (as carried in
+domin144 meson-6.16) for linux-7.2.y:
+- HHI_* macros live in meson8b.c (meson8b.h removed upstream)
+- meson8b_clk_regmaps[] removed; clk_regmap_init resolves the map
+- clk81 symbols renamed to meson8b_clk81_*
+
+diff --git a/drivers/clk/meson/Kconfig b/drivers/clk/meson/Kconfig
+index cf8cf3f9e..95982af5a 100644
+--- a/drivers/clk/meson/Kconfig
++++ b/drivers/clk/meson/Kconfig
+@@ -57,6 +57,7 @@ config COMMON_CLK_MESON8B
+ 	select COMMON_CLK_MESON_REGMAP
+ 	select COMMON_CLK_MESON_CLKC_UTILS
+ 	select COMMON_CLK_MESON_MPLL
++	select COMMON_CLK_MESON_PHASE
+ 	select COMMON_CLK_MESON_PLL
+ 	select MFD_SYSCON
+ 	select RESET_CONTROLLER
+diff --git a/drivers/clk/meson/meson8b.c b/drivers/clk/meson/meson8b.c
+index bc029c6ab..8b07b4096 100644
+--- a/drivers/clk/meson/meson8b.c
++++ b/drivers/clk/meson/meson8b.c
+@@ -20,6 +20,7 @@
+ #include "meson-clkc-utils.h"
+ #include "clk-pll.h"
+ #include "clk-mpll.h"
++#include "clk-phase.h"
+ 
+ #include <dt-bindings/clock/meson8b-clkc.h>
+ #include <dt-bindings/reset/amlogic,meson8b-clkc-reset.h>
+@@ -56,6 +57,7 @@
+ #define HHI_MALI_CLK_CNTL		0x1b0
+ #define HHI_VPU_CLK_CNTL		0x1bc
+ #define HHI_HDMI_CLK_CNTL		0x1cc
++#define HHI_ETH_CLK_CNTL		0x1d8
+ #define HHI_VDEC_CLK_CNTL		0x1e0
+ #define HHI_VDEC2_CLK_CNTL		0x1e4
+ #define HHI_VDEC3_CLK_CNTL		0x1e8
+@@ -671,7 +673,24 @@ static struct clk_regmap meson8b_mpll2 = {
+ };
+ 
+ /* clk81 is often referred as "mpeg_clk" */
+-static u32 meson8b_clk81_parents_val_table[] = { 6, 5, 7 };
++static struct clk_regmap meson8b_mpeg_rtc_osc_sel = {
++	.data = &(struct clk_regmap_mux_data){
++		.offset = HHI_MPEG_CLK_CNTL,
++		.mask = 0x1,
++		.shift = 9,
++	},
++	.hw.init = &(struct clk_init_data){
++		.name = "mpeg_rtc_osc_sel",
++		.ops = &clk_regmap_mux_ro_ops,
++		.parent_data = (const struct clk_parent_data[]) {
++			{ .fw_name = "xtal", .index = -1, },
++			{ .fw_name = "rtc_32k", .index = -1, },
++		},
++		.num_parents = 2,
++	},
++};
++
++static u32 meson8b_clk81_parents_val_table[] = { 0, 6, 5, 7 };
+ static struct clk_regmap meson8b_clk81_sel = {
+ 	.data = &(struct clk_regmap_mux_data){
+ 		.offset = HHI_MPEG_CLK_CNTL,
+@@ -688,11 +707,12 @@ static struct clk_regmap meson8b_clk81_sel = {
+ 		 * fclk_div4, fclk_div3, fclk_div5
+ 		 */
+ 		.parent_hws = (const struct clk_hw *[]) {
++			&meson8b_mpeg_rtc_osc_sel.hw,
+ 			&meson8b_fclk_div3.hw,
+ 			&meson8b_fclk_div4.hw,
+ 			&meson8b_fclk_div5.hw,
+ 		},
+-		.num_parents = 3,
++		.num_parents = 4,
+ 	},
+ };
+ 
+@@ -2701,6 +2721,79 @@ static struct clk_regmap meson8b_cts_i958 = {
+ 	},
+ };
+ 
++
++static u32 meson8_eth_clk_mux_table[] = { 7 };
++
++static struct clk_regmap meson8_eth_clk_sel = {
++	.data = &(struct clk_regmap_mux_data) {
++		.offset = HHI_ETH_CLK_CNTL,
++		.mask = 0x7,
++		.shift = 9,
++		.table = meson8_eth_clk_mux_table,
++	},
++	.hw.init = &(struct clk_init_data) {
++		.name = "eth_clk_sel",
++		.ops = &clk_regmap_mux_ops,
++		.parent_data = &(const struct clk_parent_data) {
++			/* TODO: all other parents are unknown */
++			.fw_name = "rmii_clk",
++		},
++		.num_parents = 1,
++	},
++};
++
++static struct clk_regmap meson8_eth_clk_div = {
++	.data = &(struct clk_regmap_div_data) {
++		.offset = HHI_ETH_CLK_CNTL,
++		.shift = 0,
++		.width = 8,
++	},
++	.hw.init = &(struct clk_init_data) {
++		.name = "eth_clk_div",
++		.ops = &clk_regmap_divider_ops,
++		.parent_hws = (const struct clk_hw *[]) {
++			&meson8_eth_clk_sel.hw
++		},
++		.num_parents = 1,
++		.flags = CLK_SET_RATE_PARENT,
++	},
++};
++
++static struct clk_regmap meson8_eth_clk_phase = {
++	.data = &(struct meson_clk_phase_data) {
++		.ph = {
++			.reg_off = HHI_ETH_CLK_CNTL,
++			.shift = 14,
++			.width = 1,
++		},
++	},
++	.hw.init = &(struct clk_init_data){
++		.name = "eth_clk_inverted",
++		.ops = &meson_clk_phase_ops,
++		.parent_hws = (const struct clk_hw *[]) {
++			&meson8_eth_clk_div.hw
++		},
++		.num_parents = 1,
++		.flags = CLK_SET_RATE_PARENT,
++	},
++};
++
++static struct clk_regmap meson8_eth_clk_gate = {
++	.data = &(struct clk_regmap_gate_data) {
++		.offset = HHI_ETH_CLK_CNTL,
++		.bit_idx = 8,
++	},
++	.hw.init = &(struct clk_init_data){
++		.name = "eth_clk_en",
++		.ops = &clk_regmap_gate_ops,
++		.parent_hws = (const struct clk_hw *[]) {
++			&meson8_eth_clk_phase.hw
++		},
++		.num_parents = 1,
++		.flags = CLK_SET_RATE_PARENT,
++	},
++};
++
+ static const struct clk_parent_data meson8b_pclk_parents = { .hw = &meson8b_clk81.hw };
+ 
+ #define MESON8B_PCLK(_name, _reg, _bit, _flags) \
+@@ -3012,6 +3105,11 @@ static struct clk_hw *meson8_hw_clks[] = {
+ 	[CLKID_CTS_I958]	    = &meson8b_cts_i958.hw,
+ 	[CLKID_VID_PLL_LVDS_EN]	    = &meson8b_vid_pll_lvds_en.hw,
+ 	[CLKID_HDMI_PLL_DCO_IN]	    = &hdmi_pll_dco_in.hw,
++	[CLKID_ETH_CLK_SEL]	    = &meson8_eth_clk_sel.hw,
++	[CLKID_ETH_CLK_DIV]	    = &meson8_eth_clk_div.hw,
++	[CLKID_ETH_CLK_PHASE]	    = &meson8_eth_clk_phase.hw,
++	[CLKID_ETH_CLK]		    = &meson8_eth_clk_gate.hw,
++	[CLKID_MPEG_RTC_OSC_SEL]    = &meson8b_mpeg_rtc_osc_sel.hw,
+ };
+ 
+ static struct clk_hw *meson8b_hw_clks[] = {
+@@ -3227,6 +3325,7 @@ static struct clk_hw *meson8b_hw_clks[] = {
+ 	[CLKID_CTS_I958]	    = &meson8b_cts_i958.hw,
+ 	[CLKID_VID_PLL_LVDS_EN]	    = &meson8b_vid_pll_lvds_en.hw,
+ 	[CLKID_HDMI_PLL_DCO_IN]	    = &hdmi_pll_dco_in.hw,
++	[CLKID_MPEG_RTC_OSC_SEL]    = &meson8b_mpeg_rtc_osc_sel.hw,
+ };
+ 
+ static struct clk_hw *meson8m2_hw_clks[] = {
+@@ -3444,6 +3543,7 @@ static struct clk_hw *meson8m2_hw_clks[] = {
+ 	[CLKID_CTS_I958]	    = &meson8b_cts_i958.hw,
+ 	[CLKID_VID_PLL_LVDS_EN]	    = &meson8b_vid_pll_lvds_en.hw,
+ 	[CLKID_HDMI_PLL_DCO_IN]	    = &hdmi_pll_dco_in.hw,
++	[CLKID_MPEG_RTC_OSC_SEL]    = &meson8b_mpeg_rtc_osc_sel.hw,
+ };
+ 
+ static const struct meson8b_clk_reset_line {
+diff --git a/include/dt-bindings/clock/meson8b-clkc.h b/include/dt-bindings/clock/meson8b-clkc.h
+index a09b686af..fe6c02e04 100644
+--- a/include/dt-bindings/clock/meson8b-clkc.h
++++ b/include/dt-bindings/clock/meson8b-clkc.h
+@@ -225,5 +225,6 @@
+ #define CLKID_ETH_CLK_DIV	219
+ #define CLKID_ETH_CLK_PHASE	220
+ #define CLKID_ETH_CLK		221
++#define CLKID_MPEG_RTC_OSC_SEL	222
+ 
+ #endif /* __MESON8B_CLKC_H */
