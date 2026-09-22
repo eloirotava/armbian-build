@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - edge-mxq-7.2
+      - edge-mxq-7.2-patches
     paths:
       - "config/boards/aml-s805-mxq.tvb"
       - "config/sources/families/include/meson_common.inc"
