@@ -27,6 +27,11 @@ case $BRANCH in
 		declare -g KERNEL_MAJOR_MINOR="6.12"
 		declare -g KERNELBRANCH="tag:v6.12.28" # frozen on this version
 		;;
+
+	edge)
+		declare -g KERNEL_MAJOR_MINOR="7.2"
+		# KERNELBRANCH defaults to branch:linux-7.2.y via mainline-kernel.conf.sh
+		;;
 esac
 
 family_tweaks_bsp() {
