@@ -1,0 +1,41 @@
+From: Armbian <info@armbian.com>
+Subject: [PATCH] drm/meson: TranSwitch HDMI: allocate bridge via devm_drm_bridge_alloc
+
+Linux 7.x requires DRM bridges to be allocated with
+devm_drm_bridge_alloc() so refcounting/container are set up.
+Embedded kzalloc + drm_bridge_add() Oopses in drm_bridge_get()
+(seen on MXQ S805: PC drm_bridge_add from meson_txc_hdmi_probe).
+
+Signed-off-by: Armbian <info@armbian.com>
+---
+ drivers/gpu/drm/meson/meson_transwitch_hdmi.c | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/gpu/drm/meson/meson_transwitch_hdmi.c b/drivers/gpu/drm/meson/meson_transwitch_hdmi.c
+index 1111111..2222222 100644
+--- a/drivers/gpu/drm/meson/meson_transwitch_hdmi.c
++++ b/drivers/gpu/drm/meson/meson_transwitch_hdmi.c
+@@ -1338,9 +1338,10 @@ static int meson_txc_hdmi_probe(struct platform_device *pdev)
+ 	u32 regval;
+ 	int ret;
+ 
+-	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
+-	if (!priv)
+-		return -ENOMEM;
++	priv = devm_drm_bridge_alloc(dev, struct meson_txc_hdmi, bridge,
++				     &meson_txc_hdmi_bridge_funcs);
++	if (IS_ERR(priv))
++		return PTR_ERR(priv);
+ 
+ 	platform_set_drvdata(pdev, priv);
+ 
+@@ -1399,7 +1400,6 @@ static int meson_txc_hdmi_probe(struct platform_device *pdev)
+ 
+ 	priv->bridge.of_node = dev->of_node;
+ 	priv->bridge.driver_private = priv;
+-	priv->bridge.funcs = &meson_txc_hdmi_bridge_funcs;
+ 	priv->bridge.ops = DRM_BRIDGE_OP_DETECT | DRM_BRIDGE_OP_EDID |
+ 			   DRM_BRIDGE_OP_HDMI | DRM_BRIDGE_OP_HDMI_AUDIO;
+ 	priv->bridge.type = DRM_MODE_CONNECTOR_HDMIA;
+-- 
+2.43.0
