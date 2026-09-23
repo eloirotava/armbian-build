@@ -41,6 +41,20 @@ jobs:
         with:
           fetch-depth: 1
 
+      # Nested Docker image builds need host-registered qemu for armhf chroot.
+      - name: Set up QEMU (armhf binfmt)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm
+
+      - name: Install qemu-user-static / arch-test
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-user-static binfmt-support arch-test
+          ls -la /proc/sys/fs/binfmt_misc/ | head -40
+          arch-test armhf
+          arch-test arm
+
       - name: Build SD image
         run: |
           chmod +x compile.sh
@@ -58,7 +72,8 @@ jobs:
             ALLOW_ROOT=yes \
             SKIP_EXTERNAL_TOOLCHAINS=yes \
             ARTIFACT_IGNORE_CACHE=yes \
-            COMPRESS_OUTPUTIMAGE=sha,xz
+            COMPRESS_OUTPUTIMAGE=sha,xz \
+            DOCKER_PRIVILEGED=yes
 
       - name: Collect artifacts
         run: |
