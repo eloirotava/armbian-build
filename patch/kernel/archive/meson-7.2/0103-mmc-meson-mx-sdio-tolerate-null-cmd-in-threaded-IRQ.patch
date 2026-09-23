@@ -1,0 +1,44 @@
+From: Armbian <info@armbian.com>
+Subject: [PATCH] mmc: meson-mx-sdio: tolerate cmd=NULL in threaded IRQ
+
+The hardirq can wake the thread while the timeout handler already
+completed the request and cleared host->cmd. WARN_ON(!cmd) then
+spams and races with further requests, contributing to -ETIMEDOUT /
+card drops on Meson8b SD slots under load.
+
+Re-check cmd under irq_lock and return quietly if already completed.
+
+Signed-off-by: Armbian <info@armbian.com>
+---
+ drivers/mmc/host/meson-mx-sdio.c | 18 +++++++++++++++---
+ 1 file changed, 15 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/mmc/host/meson-mx-sdio.c b/drivers/mmc/host/meson-mx-sdio.c
+index 1111111..2222222 100644
+--- a/drivers/mmc/host/meson-mx-sdio.c
++++ b/drivers/mmc/host/meson-mx-sdio.c
+@@ -427,10 +427,22 @@ static irqreturn_t meson_mx_mmc_irq(int irq, void *data)
+ static irqreturn_t meson_mx_mmc_irq_thread(int irq, void *irq_data)
+ {
+ 	struct meson_mx_mmc_host *host = (void *) irq_data;
+-	struct mmc_command *cmd = host->cmd, *next_cmd;
++	struct mmc_command *cmd, *next_cmd;
++	unsigned long flags;
+ 
+-	if (WARN_ON(!cmd))
++	/*
++	 * Timeout may have already finished the request and cleared
++	 * host->cmd while this thread was scheduled. That is a normal
++	 * race on this hardware — do not WARN.
++	 */
++	spin_lock_irqsave(&host->irq_lock, flags);
++	cmd = host->cmd;
++	spin_unlock_irqrestore(&host->irq_lock, flags);
++	if (!cmd)
+ 		return IRQ_HANDLED;
+ 
+ 	timer_delete_sync(&host->cmd_timeout);
+ 
+ 	if (cmd->data) {
+-- 
+2.43.0
