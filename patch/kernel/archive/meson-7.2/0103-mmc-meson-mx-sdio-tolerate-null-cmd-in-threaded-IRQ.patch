@@ -10,14 +10,14 @@ Re-check cmd under irq_lock and return quietly if already completed.
 
 Signed-off-by: Armbian <info@armbian.com>
 ---
- drivers/mmc/host/meson-mx-sdio.c | 18 +++++++++++++++---
- 1 file changed, 15 insertions(+), 3 deletions(-)
+ drivers/mmc/host/meson-mx-sdio.c | 13 +++++++++++--
+ 1 file changed, 11 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/mmc/host/meson-mx-sdio.c b/drivers/mmc/host/meson-mx-sdio.c
-index 1111111..2222222 100644
+index 5921e2cb2..d0dbb1f22 100644
 --- a/drivers/mmc/host/meson-mx-sdio.c
 +++ b/drivers/mmc/host/meson-mx-sdio.c
-@@ -427,10 +427,22 @@ static irqreturn_t meson_mx_mmc_irq(int irq, void *data)
+@@ -427,9 +427,18 @@ static irqreturn_t meson_mx_mmc_irq(int irq, void *data)
  static irqreturn_t meson_mx_mmc_irq_thread(int irq, void *irq_data)
  {
  	struct meson_mx_mmc_host *host = (void *) irq_data;
@@ -29,7 +29,7 @@ index 1111111..2222222 100644
 +	/*
 +	 * Timeout may have already finished the request and cleared
 +	 * host->cmd while this thread was scheduled. That is a normal
-+	 * race on this hardware — do not WARN.
++	 * race on this hardware, do not WARN.
 +	 */
 +	spin_lock_irqsave(&host->irq_lock, flags);
 +	cmd = host->cmd;
@@ -38,7 +38,5 @@ index 1111111..2222222 100644
  		return IRQ_HANDLED;
  
  	timer_delete_sync(&host->cmd_timeout);
- 
- 	if (cmd->data) {
 -- 
 2.43.0
