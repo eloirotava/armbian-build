@@ -1,0 +1,100 @@
+From: Armbian <info@armbian.com>
+Subject: [PATCH] drm/meson: TranSwitch HDMI: use drm_output_color_format consistently
+
+In 7.2 DRM_OUTPUT_COLOR_FORMAT_* are enum indices, not bit masks, and
+their order differs from HDMI_COLORSPACE_* (YCBCR444=1, YCBCR422=2 vs
+YUV422=1, YUV444=2). Wrap the color_formats tests in BIT() and replace
+the remaining HDMI_COLORSPACE_* uses in supported_formats, the
+output_format switch and the mode clock computation, so 4:2:2 and 4:4:4
+are no longer swapped.
+
+Signed-off-by: Armbian <info@armbian.com>
+---
+diff --git a/drivers/gpu/drm/meson/meson_transwitch_hdmi.c b/drivers/gpu/drm/meson/meson_transwitch_hdmi.c
+--- a/drivers/gpu/drm/meson/meson_transwitch_hdmi.c
++++ b/drivers/gpu/drm/meson/meson_transwitch_hdmi.c
+@@ -211,13 +211,13 @@
+ 	}
+ 
+ 	switch (hdmi->output_format) {
+-	case HDMI_COLORSPACE_YUV422:
++	case DRM_OUTPUT_COLOR_FORMAT_YCBCR422:
+ 		output_color_format = TX_VIDEO_DTV_OPTION_L_COLOR_FORMAT_YCBCR422;
+ 		break;
+-	case HDMI_COLORSPACE_YUV444:
++	case DRM_OUTPUT_COLOR_FORMAT_YCBCR444:
+ 		output_color_format = TX_VIDEO_DTV_OPTION_L_COLOR_FORMAT_YCBCR444;
+ 		break;
+-	case HDMI_COLORSPACE_RGB:
++	case DRM_OUTPUT_COLOR_FORMAT_RGB444:
+ 	default:
+ 		output_color_format = TX_VIDEO_DTV_OPTION_L_COLOR_FORMAT_RGB444;
+ 		break;
+@@ -430,36 +430,36 @@
+ 	output_fmts[i++] = MEDIA_BUS_FMT_RGB888_1X24;
+ 
+ 	if (max_bpc >= 16 && info->bpc == 16) {
+-		if (info->color_formats & DRM_OUTPUT_COLOR_FORMAT_YCBCR444)
++		if (info->color_formats & BIT(DRM_OUTPUT_COLOR_FORMAT_YCBCR444))
+ 			output_fmts[i++] = MEDIA_BUS_FMT_YUV16_1X48;
+ 
+ 		output_fmts[i++] = MEDIA_BUS_FMT_RGB161616_1X48;
+ 	}
+ 
+ 	if (max_bpc >= 12 && info->bpc >= 12) {
+-		if (info->color_formats & DRM_OUTPUT_COLOR_FORMAT_YCBCR422)
++		if (info->color_formats & BIT(DRM_OUTPUT_COLOR_FORMAT_YCBCR422))
+ 			output_fmts[i++] = MEDIA_BUS_FMT_UYVY12_1X24;
+ 
+-		if (info->color_formats & DRM_OUTPUT_COLOR_FORMAT_YCBCR444)
++		if (info->color_formats & BIT(DRM_OUTPUT_COLOR_FORMAT_YCBCR444))
+ 			output_fmts[i++] = MEDIA_BUS_FMT_YUV12_1X36;
+ 
+ 		output_fmts[i++] = MEDIA_BUS_FMT_RGB121212_1X36;
+ 	}
+ 
+ 	if (max_bpc >= 10 && info->bpc >= 10) {
+-		if (info->color_formats & DRM_OUTPUT_COLOR_FORMAT_YCBCR422)
++		if (info->color_formats & BIT(DRM_OUTPUT_COLOR_FORMAT_YCBCR422))
+ 			output_fmts[i++] = MEDIA_BUS_FMT_UYVY10_1X20;
+ 
+-		if (info->color_formats & DRM_OUTPUT_COLOR_FORMAT_YCBCR444)
++		if (info->color_formats & BIT(DRM_OUTPUT_COLOR_FORMAT_YCBCR444))
+ 			output_fmts[i++] = MEDIA_BUS_FMT_YUV10_1X30;
+ 
+ 		output_fmts[i++] = MEDIA_BUS_FMT_RGB101010_1X30;
+ 	}
+ 
+-	if (info->color_formats & DRM_OUTPUT_COLOR_FORMAT_YCBCR422)
++	if (info->color_formats & BIT(DRM_OUTPUT_COLOR_FORMAT_YCBCR422))
+ 		output_fmts[i++] = MEDIA_BUS_FMT_UYVY8_1X16;
+ 
+-	if (info->color_formats & DRM_OUTPUT_COLOR_FORMAT_YCBCR444)
++	if (info->color_formats & BIT(DRM_OUTPUT_COLOR_FORMAT_YCBCR444))
+ 		output_fmts[i++] = MEDIA_BUS_FMT_YUV8_1X24;
+ 
+ 	*num_output_fmts = i;
+@@ -731,7 +731,7 @@
+ 	if (mode->hdisplay > 3840)
+ 		return MODE_BAD_HVALUE;
+ 
+-	rate = drm_hdmi_compute_mode_clock(mode, 8, HDMI_COLORSPACE_RGB);
++	rate = drm_hdmi_compute_mode_clock(mode, 8, DRM_OUTPUT_COLOR_FORMAT_RGB444);
+ 	if (rate == 0)
+ 		return MODE_NOCLOCK;
+ 
+@@ -1355,9 +1355,9 @@
+ 	priv->bridge.type = DRM_MODE_CONNECTOR_HDMIA;
+ 	priv->bridge.interlace_allowed = true;
+ 	priv->bridge.max_bpc = 12;
+-	priv->bridge.supported_formats = BIT(HDMI_COLORSPACE_RGB) |
+-					 BIT(HDMI_COLORSPACE_YUV422) |
+-					 BIT(HDMI_COLORSPACE_YUV444);
++	priv->bridge.supported_formats = BIT(DRM_OUTPUT_COLOR_FORMAT_RGB444) |
++					 BIT(DRM_OUTPUT_COLOR_FORMAT_YCBCR422) |
++					 BIT(DRM_OUTPUT_COLOR_FORMAT_YCBCR444);
+ 	priv->bridge.vendor = "Amlogic";
+ 	priv->bridge.product = "TranSwitch-HDMI";
+ 	priv->bridge.hdmi_audio_dev = dev;
+-- 
+2.43.0
