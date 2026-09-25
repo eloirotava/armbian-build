@@ -1,3 +1,6 @@
 dtb_file=/dtb/meson8b-mxq.dtb
+# verbose kernel log on the serial console while the 7.2 image is new
+verbosity=7
+console=both
 
 # The following contents are auto-generated.

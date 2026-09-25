@@ -30,7 +30,7 @@ case $BRANCH in
 
 	edge)
 		declare -g KERNEL_MAJOR_MINOR="7.2"
-		# KERNELBRANCH defaults to branch:linux-7.2.y via mainline-kernel.conf.sh
+		declare -g KERNELBRANCH="tag:v7.2.7" # the patches in meson-7.2 were ported against this
 		;;
 esac
 

@@ -14,3 +14,11 @@ BOOTENV_FILE="aml-s805-mxq.txt"
 
 BOOTSIZE="200"
 BOOTFS_TYPE="fat"
+
+# The factory U-Boot only fatloads s805_autoscript from a partition typed
+# FAT16 (0x0e) and marked bootable; Armbian types /boot as XBOOTLDR (0xea).
+function post_create_partitions__mxq_fat16_boot() {
+	display_alert "Boot partition as FAT16 LBA, bootable" "${SDCARD}.raw" "info"
+	run_host_command_logged sfdisk --part-type "${SDCARD}".raw 1 0e
+	run_host_command_logged sfdisk --activate "${SDCARD}".raw 1
+}
