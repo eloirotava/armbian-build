@@ -55,6 +55,26 @@ jobs:
           arch-test armhf
           arch-test arm
 
+      # Caches, so that iterating on the meson-7.2 patches does not rebuild
+      # everything: the kernel git and the rootfs rarely change (keyed once);
+      # ccache changes every run (keyed per run, restored from the latest).
+      # GitHub drops caches unused for 7 days, so after a pause the first
+      # build is a full one again.
+      - name: Restore kernel sources and rootfs cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            cache/git-bare
+            cache/rootfs
+          key: mxq-edge-src-${{ hashFiles('config/sources/families/include/meson_common.inc') }}
+
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: cache/ccache
+          key: mxq-edge-ccache-${{ github.run_id }}
+          restore-keys: mxq-edge-ccache-
+
       - name: Build SD image
         run: |
           chmod +x compile.sh
@@ -66,14 +86,21 @@ jobs:
             BUILD_DESKTOP=no \
             KERNEL_CONFIGURE=no \
             EXPERT=yes \
-            USE_CCACHE=no \
+            USE_CCACHE=yes \
+            KERNEL_GIT=shallow \
             CLEAN_LEVEL=make,debs \
             SHOW_LOG=yes \
             ALLOW_ROOT=yes \
             SKIP_EXTERNAL_TOOLCHAINS=yes \
-            ARTIFACT_IGNORE_CACHE=yes \
             COMPRESS_OUTPUTIMAGE=sha,xz \
             DOCKER_PRIVILEGED=yes
+
+      # the build runs as root in Docker; let actions/cache read what it wrote
+      - name: Make caches readable
+        if: always()
+        run: |
+          sudo chown -R "$(id -u):$(id -g)" cache/ccache cache/git-bare cache/rootfs 2>/dev/null || true
+          du -sh cache/ccache cache/git-bare cache/rootfs 2>/dev/null || true
 
       - name: Collect artifacts
         run: |
