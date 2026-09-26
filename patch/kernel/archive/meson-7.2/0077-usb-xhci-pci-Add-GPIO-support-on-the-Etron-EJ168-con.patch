@@ -16,20 +16,15 @@ archive the related code can be found in:
   linux/kernels/mips-linux-2.6.31/drivers/usb/host/etxhci-pci.c
 
 Signed-off-by: Martin Blumenstingl <martin.blumenstingl@googlemail.com>
+[ported to linux-7.2: Makefile context gained xhci-pci-prom21]
 ---
- drivers/usb/host/Kconfig          |   5 +
- drivers/usb/host/Makefile         |   1 +
- drivers/usb/host/xhci-pci-etron.c | 308 ++++++++++
- drivers/usb/host/xhci-pci.c       |   3 +
- 4 files changed, 317 insertions(+)
-
 diff --git a/drivers/usb/host/Kconfig b/drivers/usb/host/Kconfig
-index 111111111111..222222222222 100644
+index b3b1ec6..91cd696 100644
 --- a/drivers/usb/host/Kconfig
 +++ b/drivers/usb/host/Kconfig
-@@ -42,6 +42,11 @@ config USB_XHCI_PCI
- 	depends on USB_PCI
- 	default y
+@@ -48,6 +48,11 @@ config USB_XHCI_PCI_PROM21
+ 	default USB_XHCI_PCI if SENSORS_PROM21_XHCI != n
+ 	select AUXILIARY_BUS
  
 +config USB_XHCI_PCI_ETRON
 +	tristate
@@ -40,20 +35,20 @@ index 111111111111..222222222222 100644
  	tristate "Support for additional Renesas xHCI controller with firmware"
  	depends on USB_XHCI_PCI
 diff --git a/drivers/usb/host/Makefile b/drivers/usb/host/Makefile
-index 111111111111..222222222222 100644
+index 174580c..0dc845a 100644
 --- a/drivers/usb/host/Makefile
 +++ b/drivers/usb/host/Makefile
-@@ -72,6 +72,7 @@ obj-$(CONFIG_USB_UHCI_HCD)	+= uhci-hcd.o
+@@ -71,6 +71,7 @@ obj-$(CONFIG_USB_UHCI_HCD)	+= uhci-hcd.o
  obj-$(CONFIG_USB_FHCI_HCD)	+= fhci.o
  obj-$(CONFIG_USB_XHCI_HCD)	+= xhci-hcd.o
  obj-$(CONFIG_USB_XHCI_PCI)	+= xhci-pci.o
 +obj-$(CONFIG_USB_XHCI_PCI_ETRON)	+= xhci-pci-etron.o
+ obj-$(CONFIG_USB_XHCI_PCI_PROM21)	+= xhci-pci-prom21.o
  obj-$(CONFIG_USB_XHCI_PCI_RENESAS)	+= xhci-pci-renesas.o
  obj-$(CONFIG_USB_XHCI_PLATFORM) += xhci-plat-hcd.o
- obj-$(CONFIG_USB_XHCI_HISTB)	+= xhci-histb.o
 diff --git a/drivers/usb/host/xhci-pci-etron.c b/drivers/usb/host/xhci-pci-etron.c
 new file mode 100644
-index 000000000000..111111111111
+index 0000000..09cdb9a
 --- /dev/null
 +++ b/drivers/usb/host/xhci-pci-etron.c
 @@ -0,0 +1,308 @@
@@ -366,10 +361,10 @@ index 000000000000..111111111111
 +MODULE_IMPORT_NS("xhci");
 +MODULE_LICENSE("GPL v2");
 diff --git a/drivers/usb/host/xhci-pci.c b/drivers/usb/host/xhci-pci.c
-index 111111111111..222222222222 100644
+index 7518cc2..0f2022b 100644
 --- a/drivers/usb/host/xhci-pci.c
 +++ b/drivers/usb/host/xhci-pci.c
-@@ -682,6 +682,9 @@ EXPORT_SYMBOL_NS_GPL(xhci_pci_common_probe, "xhci");
+@@ -690,6 +690,9 @@ EXPORT_SYMBOL_NS_GPL(xhci_pci_common_probe, "xhci");
  static const struct pci_device_id pci_ids_renesas[] = {
  	{ PCI_DEVICE(PCI_VENDOR_ID_RENESAS, 0x0014) },
  	{ PCI_DEVICE(PCI_VENDOR_ID_RENESAS, 0x0015) },
@@ -379,6 +374,3 @@ index 111111111111..222222222222 100644
  	{ /* end: all zeroes */ }
  };
  
--- 
-Armbian
-

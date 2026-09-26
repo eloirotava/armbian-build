@@ -7,8 +7,12 @@ Eth RMII clock tree (0018) and mpeg_rtc (0025) were rewritten as
 
 CVBS PHY (0007) was ported to 7.2 and moved back to ../meson-7.2: 0052
 makes the HHI regmap optional, and without 0007 meson_venc_init still
-wrote the CVBS DAC through it (NULL on Meson8b, oops at bind). MMC/WiFi/timer/xhci
-WiPs left out until needed.
+wrote the CVBS DAC through it (NULL on Meson8b, oops at bind). The timer WiP (0087) and its revert (0088) cancel out and stay here.
+Ported to 7.2 and moved back to ../meson-7.2:
+- 0077 xhci Etron GPIO: the Makefile gained xhci-pci-prom21 at that spot
+- 0089 rtw88 sdio TX work: 7.2 allocated tx_handler_data with kmalloc_obj
+Already in linux-7.2.y, nothing to port: 0082-0085 (the meson-mx-sdio
+regmap, clock and disabled-child rework).
 
 Also already present in linux-7.2.y (Armbian fails on reverse-apply):
 - 0001-mmc-meson-mx-sdhc-Use-devm_mmc_alloc_host-helper
