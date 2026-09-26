@@ -15,10 +15,19 @@ BOOTENV_FILE="aml-s805-mxq.txt"
 BOOTSIZE="200"
 BOOTFS_TYPE="fat"
 
-# The factory U-Boot only fatloads s805_autoscript from a partition typed
+# The factory U-Boot only fatloads its boot files from a partition typed
 # FAT16 (0x0e) and marked bootable; Armbian types /boot as XBOOTLDR (0xea).
 function post_create_partitions__mxq_fat16_boot() {
 	display_alert "Boot partition as FAT16 LBA, bootable" "${SDCARD}.raw" "info"
 	run_host_command_logged sfdisk --part-type "${SDCARD}".raw 1 0e
 	run_host_command_logged sfdisk --activate "${SDCARD}".raw 1
+}
+
+# The factory U-Boot on these boxes fatloads boot.scr (then kernel.img) from
+# the first partition of the SD card, not s805_autoscript; others look for
+# aml_autoscript.  Ship the compiled boot script under all three names.
+function pre_umount_final_image__mxq_boot_scr_names() {
+	display_alert "Boot script also as boot.scr and aml_autoscript" "${BOARD}" "info"
+	run_host_command_logged cp -v "${MOUNT}/boot/s805_autoscript" "${MOUNT}/boot/boot.scr"
+	run_host_command_logged cp -v "${MOUNT}/boot/s805_autoscript" "${MOUNT}/boot/aml_autoscript"
 }
