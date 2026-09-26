@@ -31,3 +31,43 @@ function pre_umount_final_image__mxq_boot_scr_names() {
 	run_host_command_logged cp -v "${MOUNT}/boot/s805_autoscript" "${MOUNT}/boot/boot.scr"
 	run_host_command_logged cp -v "${MOUNT}/boot/s805_autoscript" "${MOUNT}/boot/aml_autoscript"
 }
+
+# Out-of-tree modules, built against the kernel of this very build (same
+# tree, same compiler) and shipped in the kernel package, in extra/:
+#   amlnf    the vendor NAND stack; the NAND boot keeps its root on /dev/data
+#   ssv6xxx  SSV6051/SSV6256 SDIO Wi-Fi (firmware goes in with the rootfs)
+# A module that does not build only leaves a warning, so the image still
+# comes out; check the build log for "mxq module".
+declare -g MXQ_AMLNF_COMMIT="0dd91e48836915c32c3a1be2ea47bfe01ee85952"
+declare -g MXQ_SSV6XXX_COMMIT="d9f2ee435bb313c98fe6e867e612129f721dc7df"
+function pre_package_kernel_image__mxq_extra_modules() {
+	declare extra="${tmp_kernel_install_dirs[INSTALL_MOD_PATH]}/lib/modules/${kernel_version_family}/extra"
+	declare name commit src ko
+	run_host_command_logged mkdir -p "${extra}"
+	for name in amlnf ssv6xxx; do
+		commit="MXQ_${name^^}_COMMIT"
+		commit="${!commit}"
+		src="${SRC}/cache/sources/mxq-${name}"
+		rm -rf "${src}"
+		if git clone --quiet "https://github.com/eloirotava/${name}.git" "${src}" &&
+			git -C "${src}" checkout --quiet "${commit}" &&
+			run_kernel_make -C "${kernel_work_dir}" M="${src}" modules; then
+			for ko in "${src}"/*.ko; do
+				run_host_command_logged "${KERNEL_COMPILER}strip" --strip-debug "${ko}"
+				run_host_command_logged install -m 0644 "${ko}" "${extra}/"
+			done
+			display_alert "mxq module built" "${name} @ ${commit:0:7}" "info"
+		else
+			display_alert "mxq module FAILED to build" "${name} @ ${commit:0:7}" "wrn"
+		fi
+	done
+}
+
+# The NAND installer (grava-do-sd) and the SSV firmware, in the rootfs.
+function post_family_tweaks__mxq_nand_kit_and_firmware() {
+	declare kit="${SRC}/packages/bsp/aml-s805-mxq"
+	run_host_command_logged install -D -m 0755 "${kit}/nand/grava-do-sd" "${SDCARD}/usr/local/sbin/grava-do-sd"
+	run_host_command_logged install -D -m 0755 "${kit}/nand/pack-bootimg.py" "${SDCARD}/usr/local/lib/mxq-nand/pack-bootimg.py"
+	run_host_command_logged install -D -m 0644 "${kit}/nand/initrd-mini-base.img" "${SDCARD}/usr/local/lib/mxq-nand/initrd-mini-base.img"
+	run_host_command_logged install -D -m 0644 -t "${SDCARD}/lib/firmware/ssv" "${kit}/firmware/ssv/ssv6051-sw.bin" "${kit}/firmware/ssv/ssv6x5x-sw.bin"
+}

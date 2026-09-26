@@ -1,0 +1,34 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * MXQ S805 box booting from its internal raw NAND.
+ *
+ * Same board as meson8b-mxq.dts, plus the NAND controller from 0106. It is
+ * the dtb packed into the NAND boot.img: the out-of-tree amlnf driver
+ * (the vendor NAND stack, with the vendor FTL) binds to it, exposes the
+ * vendor partitions (/dev/boot, /dev/data, ...) and the root lives on
+ * /dev/data. The kernel does not build the mainline meson_nand driver
+ * (CONFIG_MTD is off), which would claim the same compatible.
+ *
+ * The NAND pads are the BOOT bank that sdhc also uses, so &sdhc must stay
+ * disabled on this board.
+ */
+
+/dts-v1/;
+
+#include "meson8b-mxq.dts"
+
+/ {
+	model = "MXQ S805 (raw NAND variant)";
+};
+
+&nfc {
+	status = "okay";
+	pinctrl-0 = <&nand_pins>;
+	pinctrl-names = "default";
+
+	nand@0 {
+		reg = <0>;
+		nand-rb = <0>;
+		nand-ecc-mode = "hw";
+	};
+};

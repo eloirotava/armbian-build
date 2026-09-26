@@ -1,0 +1,132 @@
+#!/bin/sh
+# Grava na NAND do MXQ S805 o sistema que esta rodando do cartao SD.
+#
+# Mesma ideia do install.sh do balbes (Armbian 3.10.99): o que vai para a
+# NAND e o que acabou de dar partida pelo cartao.
+#
+#   /dev/boot  boot.img montado agora: o uImage do /boot do cartao, o
+#              meson8b-mxq-nand.dtb e um initrd minimo com o amlnf.ko do
+#              kernel em execucao (o initrd do Armbian nao cabe na janela
+#              de 16 MB do U-Boot de fabrica e nao sabe montar /dev/data)
+#   /dev/data  copia do sistema em execucao, com a raiz em LABEL=NANDROOT
+#
+# Diferente do balbes: nao chama fw_setenv. Nao mexe em nenv, nbbt, ncnf,
+# nkey, logo, misc, recovery, system nem cache, e nao marca bloco ruim.
+# O console do boot pela NAND vem do proprio kernel (CONFIG_CMDLINE_EXTEND),
+# ja que o ambiente do U-Boot passa console=ttyS0, que o mainline nao tem.
+#
+# Uso, com a caixa iniciada pelo cartao:
+#   grava-do-sd          mostra o que faria
+#   grava-do-sd grava    grava
+set -eu
+
+KIT=/usr/local/lib/mxq-nand
+PACK=$KIT/pack-bootimg.py
+BASE=$KIT/initrd-mini-base.img
+MOD=amlnf
+KVER=$(uname -r)
+KO=/lib/modules/$KVER/extra/$MOD.ko
+DTB=/boot/dtb/meson8b-mxq-nand.dtb
+UIMAGE=/boot/uImage
+WORK=/tmp/mxq-nand
+IMG=$WORK/boot.img
+MNT=/mnt/nandroot
+MAX_BOOT=$((16 * 1024 * 1024))
+
+die() { echo "Paro: $*"; exit 1; }
+
+ROOT=$(findmnt -n -o SOURCE /)
+case $ROOT in
+	/dev/mmcblk*) ;;
+	*) die "a raiz atual e $ROOT; isto so roda com o sistema vindo do cartao" ;;
+esac
+
+# A S805 nao tem relogio com bateria: sem rede, parte com a data errada e o
+# tar reclama de data no futuro. Usa a data deste script como piso.
+if [ "$(date +%Y)" -lt 2025 ]; then
+	date -s "@$(stat -c %Y "$0")" >/dev/null
+	echo "Relogio estava errado; acertado para $(date)"
+fi
+
+for f in "$PACK" "$BASE" "$KO" "$DTB" "$UIMAGE"; do
+	[ -f "$f" ] || die "falta $f"
+done
+for c in python3 cpio gzip mke2fs; do
+	command -v "$c" >/dev/null || die "falta o comando $c"
+done
+KOVER=$(modinfo -F vermagic "$KO" | awk '{print $1}')
+[ "$KOVER" = "$KVER" ] || die "$KO e de $KOVER, o kernel e $KVER"
+
+echo "== 1. initrd minimo com o $MOD.ko de $KVER"
+rm -rf "$WORK"
+mkdir -p "$WORK/ird"
+(cd "$WORK/ird" && gzip -dc "$BASE" | cpio -i --quiet)
+rm -f "$WORK/ird"/amlnf*.ko
+cp "$KO" "$WORK/ird/$MOD.ko"
+sed -i "s|insmod /amlnf[_a-z0-9]*\.ko|insmod /$MOD.ko|" "$WORK/ird/init"
+grep -q "insmod /$MOD.ko" "$WORK/ird/init" || die "init do initrd sem insmod /$MOD.ko"
+(cd "$WORK/ird" && find . | cpio -o -H newc --quiet | gzip -9) > "$WORK/initrd.img"
+
+echo "== 2. boot.img"
+python3 "$PACK" "$UIMAGE" "$WORK/initrd.img" "$DTB" "$IMG" "armbian-$KVER"
+SIZE=$(stat -c %s "$IMG")
+[ "$SIZE" -le "$MAX_BOOT" ] || die "boot.img tem $SIZE bytes, passa da janela de 16 MB"
+echo "boot.img: $SIZE bytes, kernel $KVER"
+
+if [ "${1:-}" != "grava" ]; then
+	echo
+	echo "Nada foi gravado. Para gravar: $0 grava"
+	exit 0
+fi
+
+echo "== 3. driver da NAND"
+# Uma particao ja escrita so abre com readonly=0: a FTL precisa reconciliar
+# o mapeamento, e com a escrita recusada ela toma a recusa por defeito.
+if [ ! -b /dev/boot ] || [ ! -b /dev/data ]; then
+	modprobe "$MOD" readonly=0 allow_markbad=0 allow_meta=0 parts=all use_cache=0
+fi
+i=0
+while [ ! -b /dev/boot ] || [ ! -b /dev/data ]; do
+	i=$((i + 1))
+	[ "$i" -le 60 ] || die "/dev/boot ou /dev/data nao apareceu"
+	sleep 1
+done
+P=/sys/module/$MOD/parameters
+[ "$(cat $P/allow_markbad)" = 0 ] && [ "$(cat $P/allow_meta)" = 0 ] ||
+	die "allow_markbad ou allow_meta aberto"
+[ "$(cat $P/readonly)" = 0 ] || die "driver somente leitura"
+
+echo "== 4. /dev/boot"
+WANT=$(sha256sum "$IMG" | awk '{print $1}')
+dd if="$IMG" of=/dev/boot bs=1M conv=fsync status=progress
+GOT=$(head -c "$SIZE" /dev/boot | sha256sum | awk '{print $1}')
+[ "$WANT" = "$GOT" ] || die "/dev/boot lido de volta nao confere; /dev/data nao foi tocado"
+echo "/dev/boot confere: $GOT"
+
+echo "== 5. /dev/data"
+findmnt -n /dev/data >/dev/null 2>&1 && die "/dev/data esta montado"
+mke2fs -F -q -t ext4 -L NANDROOT -m 0 /dev/data
+mkdir -p "$MNT"
+mount -t ext4 -o noatime /dev/data "$MNT"
+echo "Copiando o sistema do cartao. Demora."
+tar -C / --one-file-system -cpf - . | tar -C "$MNT" --warning=no-timestamp -xpf -
+mkdir -p "$MNT/dev" "$MNT/proc" "$MNT/sys" "$MNT/run" "$MNT/tmp" \
+	"$MNT/mnt" "$MNT/media" "$MNT/var/log" "$MNT/var/log.hdd" "$MNT/var/tmp" "$MNT/boot"
+# O /dev do cartao e um devtmpfs e nao vem na copia, mas o run-init do
+# initrd minimo abre /dev/console da raiz nova antes do /sbin/init: sem
+# ele, kernel panic "Attempted to kill init".
+[ -c "$MNT/dev/console" ] || mknod -m 600 "$MNT/dev/console" c 5 1
+[ -c "$MNT/dev/null" ] || mknod -m 666 "$MNT/dev/null" c 1 3
+# Raiz pelo rotulo; o /boot do cartao (FAT) nao existe na NAND: o kernel
+# de la mora no /dev/boot.
+awk '$2 == "/" { print "LABEL=NANDROOT / ext4 defaults,noatime,commit=600,errors=remount-ro 0 1"; next }
+     $2 == "/boot" { next } { print }' "$MNT/etc/fstab" > "$MNT/etc/fstab.new"
+mv "$MNT/etc/fstab.new" "$MNT/etc/fstab"
+grep -q '^LABEL=NANDROOT / ' "$MNT/etc/fstab" || die "fstab sem a raiz em LABEL=NANDROOT"
+# o redimensionador do Armbian e para o cartao, nao para a particao da NAND
+rm -f "$MNT"/etc/systemd/system/*.wants/armbian-resize-filesystem.service
+sync
+umount "$MNT"
+rm -rf "$WORK"
+echo
+echo "Pronto. Desliga, tira o cartao, liga com o TTL."

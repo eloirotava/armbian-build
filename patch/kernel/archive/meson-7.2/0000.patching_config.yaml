@@ -1,0 +1,13 @@
+# Armbian patching config for the meson (S805 / meson8b, 32-bit) edge 7.2 kernel.
+#
+# Copies every .dts in the sibling "dt/" directory into the kernel's
+# arch/arm/boot/dts/amlogic/ and appends a dtb-$(CONFIG_MACH_MESON8) line
+# for each to that Makefile, so nothing here has to be rebased when upstream
+# touches the amlogic DT Makefile. The meson8b boards are listed under
+# CONFIG_MACH_MESON8 there, not ...MESON8B.
+config:
+  name: meson-7.2-mxq
+  kind: kernel
+
+  dts-directories:
+    - { source: "dt", target: "arch/arm/boot/dts/amlogic" }
