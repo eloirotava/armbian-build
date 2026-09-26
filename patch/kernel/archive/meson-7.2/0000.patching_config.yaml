@@ -11,3 +11,12 @@ config:
 
   dts-directories:
     - { source: "dt", target: "arch/arm/boot/dts/amlogic" }
+
+  # dts-directories only copies the files; this is what adds each one to
+  # the Makefile, so that it actually gets built into a .dtb.
+  auto-patch-dt-makefile:
+    - { add-only: true, directory: "arch/arm/boot/dts/amlogic", config-var: "CONFIG_MACH_MESON8" }
+
+  patches-to-git:
+    do-not-commit-regexes:
+      - "^arch/([a-zA-Z0-9]+)/boot/dts/.*/Makefile$"
