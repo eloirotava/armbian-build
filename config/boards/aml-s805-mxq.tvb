@@ -62,6 +62,8 @@ function pre_package_kernel_image__mxq_extra_modules() {
 			display_alert "mxq module FAILED to build" "${name} @ ${commit:0:7}" "wrn"
 		fi
 	done
+	# modules_install ran depmod before extra/ was filled
+	run_host_command_logged depmod -b "${tmp_kernel_install_dirs[INSTALL_MOD_PATH]}" "${kernel_version_family}"
 }
 
 # The NAND installer (grava-do-sd) and the SSV firmware, in the rootfs.
@@ -71,4 +73,23 @@ function post_family_tweaks__mxq_nand_kit_and_firmware() {
 	run_host_command_logged install -D -m 0755 "${kit}/nand/pack-bootimg.py" "${SDCARD}/usr/local/lib/mxq-nand/pack-bootimg.py"
 	run_host_command_logged install -D -m 0644 "${kit}/nand/initrd-mini-base.img" "${SDCARD}/usr/local/lib/mxq-nand/initrd-mini-base.img"
 	run_host_command_logged install -D -m 0644 -t "${SDCARD}/lib/firmware/ssv" "${kit}/firmware/ssv/ssv6051-sw.bin" "${kit}/firmware/ssv/ssv6x5x-sw.bin"
+	# amlnf binds to the NAND node of the -nand dtbs. Loaded on its own it
+	# would come up readonly=1, and the vendor FTL cannot open an already
+	# written partition read-only: it takes the refused writes for failing
+	# blocks and brings the box down. grava-do-sd loads it by name, with
+	# readonly=0, which a blacklist does not prevent.
+	echo "blacklist amlnf" > "${SDCARD}/etc/modprobe.d/amlnf.conf"
+	# meson-mx-sdio is a module on edge (to be able to work on it in place);
+	# when booting from the SD card the root sits behind it, so the initrd
+	# must carry it.
+	grep -qx meson-mx-sdio "${SDCARD}/etc/initramfs-tools/modules" 2> /dev/null ||
+		echo meson-mx-sdio >> "${SDCARD}/etc/initramfs-tools/modules"
+}
+
+# Booting from the SD card, use the NAND dtb on edge: it keeps the card slot
+# and adds the NAND controller, so grava-do-sd can reach the NAND.
+function pre_umount_final_image__mxq_sd_boots_nand_dtb() {
+	[[ "${BRANCH}" == "edge" ]] || return 0
+	run_host_command_logged sed -i "s|^dtb_file=.*|dtb_file=/dtb/meson8b-mxq-nand.dtb|" "${MOUNT}/boot/armbianEnv.txt"
+	run_host_command_logged grep -H dtb_file "${MOUNT}/boot/armbianEnv.txt"
 }

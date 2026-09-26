@@ -107,6 +107,8 @@ jobs:
           mkdir -p artifacts
           find output/images -type f \( -name '*.img' -o -name '*.img.xz' -o -name '*.sha' -o -name '*.txt' \) \
             -print -exec cp -a {} artifacts/ \; || true
+          # kernel headers, to build out-of-tree modules (meson-mx-sdio work) on the box
+          find output -type f -name 'linux-headers-edge-meson_*.deb' -print -exec cp -a {} artifacts/ \; || true
           ls -lah artifacts output/images 2>/dev/null || true
 
       - name: Upload SD image

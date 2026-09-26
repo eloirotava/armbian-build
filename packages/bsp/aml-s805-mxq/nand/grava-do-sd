@@ -16,8 +16,12 @@
 # ja que o ambiente do U-Boot passa console=ttyS0, que o mainline nao tem.
 #
 # Uso, com a caixa iniciada pelo cartao:
-#   grava-do-sd          mostra o que faria
-#   grava-do-sd grava    grava
+#   grava-do-sd [--dtb NOME]          mostra o que faria
+#   grava-do-sd [--dtb NOME] grava    grava
+#
+# O dtb do boot.img e, por padrao, o da MXQ com NAND e leitor de SD
+# (meson8b-mxq-nand.dtb). Numa caixa com o Wi-Fi SSV6051:
+#   grava-do-sd --dtb meson8b-mxq-nand-ssv6051.dtb grava
 set -eu
 
 KIT=/usr/local/lib/mxq-nand
@@ -27,6 +31,10 @@ MOD=amlnf
 KVER=$(uname -r)
 KO=/lib/modules/$KVER/extra/$MOD.ko
 DTB=/boot/dtb/meson8b-mxq-nand.dtb
+if [ "${1:-}" = "--dtb" ]; then
+	DTB=/boot/dtb/${2:?falta o nome do dtb}
+	shift 2
+fi
 UIMAGE=/boot/uImage
 WORK=/tmp/mxq-nand
 IMG=$WORK/boot.img
@@ -71,7 +79,7 @@ echo "== 2. boot.img"
 python3 "$PACK" "$UIMAGE" "$WORK/initrd.img" "$DTB" "$IMG" "armbian-$KVER"
 SIZE=$(stat -c %s "$IMG")
 [ "$SIZE" -le "$MAX_BOOT" ] || die "boot.img tem $SIZE bytes, passa da janela de 16 MB"
-echo "boot.img: $SIZE bytes, kernel $KVER"
+echo "boot.img: $SIZE bytes, kernel $KVER, dtb $(basename "$DTB")"
 
 if [ "${1:-}" != "grava" ]; then
 	echo

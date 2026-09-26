@@ -1,0 +1,76 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * MXQ S805 booting from its internal raw NAND, with the SSV6051 SDIO Wi-Fi.
+ *
+ * Taken from the dtb that runs on such a box under 6.12: the Wi-Fi sits on
+ * port A of the SDIO controller, is powered by two GPIOs held high and gets
+ * the 32 kHz clock from xtal_32k_out.
+ *
+ * The SD card slot (port B, slot@1 in meson8b-mxq.dts) is on the same
+ * controller, and meson-mx-sdio registers only the first slot it finds, so
+ * this dtb gives the controller to the Wi-Fi and drops the card slot. Booting
+ * from an SD card still works: that is done by the factory U-Boot, and the
+ * SD image uses a dtb that keeps the slot.
+ */
+
+/dts-v1/;
+
+#include "meson8b-mxq-nand.dts"
+
+/ {
+	model = "MXQ S805 (raw NAND, SSV6051)";
+};
+
+/delete-node/ &sd_card_slot;
+
+&pinctrl_cbus {
+	sd_a_pins: sd-a {
+		mux {
+			groups = "sd_d0_a", "sd_d1_a", "sd_d2_a", "sd_d3_a",
+				 "sd_clk_a", "sd_cmd_a";
+			function = "sd_a";
+			bias-pull-up;
+		};
+	};
+
+	xtal_32k_out_pins: wifi-32k {
+		mux {
+			groups = "xtal_32k_out";
+			function = "xtal";
+		};
+	};
+};
+
+&gpio {
+	wifi-pwr-x11 {
+		gpio-hog;
+		gpios = <GPIOX_11 GPIO_ACTIVE_HIGH>;
+		output-high;
+		line-name = "wifi-pwr-x11";
+	};
+};
+
+&gpio_ao {
+	wifi-pwr-ao6 {
+		gpio-hog;
+		gpios = <GPIOAO_6 GPIO_ACTIVE_HIGH>;
+		output-high;
+		line-name = "wifi-pwr-ao6";
+	};
+};
+
+&sdio {
+	pinctrl-0 = <&sd_a_pins>, <&xtal_32k_out_pins>;
+	pinctrl-names = "default";
+
+	wifi_slot: slot@0 {
+		compatible = "mmc-slot";
+		reg = <0>;
+		bus-width = <4>;
+		cap-sd-highspeed;
+		disable-wp;
+		non-removable;
+		max-frequency = <25000000>;
+		vmmc-supply = <&vcc_3v3>;
+	};
+};
