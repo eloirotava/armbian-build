@@ -1,0 +1,35 @@
+From: Armbian <info@armbian.com>
+Subject: [PATCH] drm/meson: TranSwitch HDMI: limit to 8 bpc
+
+On the MXQ (S805) the 7.2 kernel sets up 1080p60 with the right clocks
+(TMDS 1485 MHz, pixel 148.5 MHz) and the sink detects the signal, but
+the screen stays black, even with the VENC test pattern and the
+TranSwitch BIST. A register dump against 6.12, which shows a picture on
+the same box and monitor, differs in TX_VIDEO_DTV_MODE and
+TX_VIDEO_DTV_OPTION_L: 7.2 programs 30-bit (10 bpc) output, 6.12 24-bit.
+
+The HDMI state helper now picks the highest bpc the sink supports, up to
+bridge.max_bpc (12 here), but the Meson8/8b video clock tree leaves the
+TMDS clock at the 8 bpc rate. Limit the bridge to 8 bpc.
+
+Signed-off-by: Armbian <info@armbian.com>
+---
+diff --git a/drivers/gpu/drm/meson/meson_transwitch_hdmi.c b/drivers/gpu/drm/meson/meson_transwitch_hdmi.c
+index f33f27f..6fada86 100644
+--- a/drivers/gpu/drm/meson/meson_transwitch_hdmi.c
++++ b/drivers/gpu/drm/meson/meson_transwitch_hdmi.c
+@@ -1354,7 +1354,13 @@ static int meson_txc_hdmi_probe(struct platform_device *pdev)
+ 			   DRM_BRIDGE_OP_HDMI | DRM_BRIDGE_OP_HDMI_AUDIO;
+ 	priv->bridge.type = DRM_MODE_CONNECTOR_HDMIA;
+ 	priv->bridge.interlace_allowed = true;
+-	priv->bridge.max_bpc = 12;
++	/*
++	 * The Meson8/8b video clock tree does not scale the TMDS clock for
++	 * deep colour, so anything above 8 bpc is packed into an 8 bpc TMDS
++	 * clock and the sink shows nothing.  Since 7.2 the HDMI state helper
++	 * picks the highest bpc the sink supports, up to this limit.
++	 */
++	priv->bridge.max_bpc = 8;
+ 	priv->bridge.supported_formats = BIT(DRM_OUTPUT_COLOR_FORMAT_RGB444) |
+ 					 BIT(DRM_OUTPUT_COLOR_FORMAT_YCBCR422) |
+ 					 BIT(DRM_OUTPUT_COLOR_FORMAT_YCBCR444);
