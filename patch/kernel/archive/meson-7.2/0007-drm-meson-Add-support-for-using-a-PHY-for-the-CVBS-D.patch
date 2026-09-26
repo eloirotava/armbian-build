@@ -14,15 +14,10 @@ compensate for the missing .dtb entry) which takes over all
 HHI_VDAC_CNTL register management.
 
 Signed-off-by: Martin Blumenstingl <martin.blumenstingl@googlemail.com>
+[ported to linux-7.2: bridge.next_bridge and no drm_connector_attach_encoder]
 ---
- drivers/gpu/drm/meson/Kconfig              |   1 +
- drivers/gpu/drm/meson/meson_drv.h          |   6 +
- drivers/gpu/drm/meson/meson_encoder_cvbs.c | 132 ++++++++--
- drivers/gpu/drm/meson/meson_venc.c         |  13 -
- 4 files changed, 110 insertions(+), 42 deletions(-)
-
 diff --git a/drivers/gpu/drm/meson/Kconfig b/drivers/gpu/drm/meson/Kconfig
-index 111111111111..222222222222 100644
+index 417f798..09312aa 100644
 --- a/drivers/gpu/drm/meson/Kconfig
 +++ b/drivers/gpu/drm/meson/Kconfig
 @@ -13,6 +13,7 @@ config DRM_MESON
@@ -34,7 +29,7 @@ index 111111111111..222222222222 100644
  config DRM_MESON_DW_HDMI
  	tristate "HDMI Synopsys Controller support for Amlogic Meson Display"
 diff --git a/drivers/gpu/drm/meson/meson_drv.h b/drivers/gpu/drm/meson/meson_drv.h
-index 111111111111..222222222222 100644
+index be4b0e4..b3b0df0 100644
 --- a/drivers/gpu/drm/meson/meson_drv.h
 +++ b/drivers/gpu/drm/meson/meson_drv.h
 @@ -16,6 +16,8 @@ struct drm_device;
@@ -58,7 +53,7 @@ index 111111111111..222222222222 100644
  	struct {
  		bool osd1_enabled;
 diff --git a/drivers/gpu/drm/meson/meson_encoder_cvbs.c b/drivers/gpu/drm/meson/meson_encoder_cvbs.c
-index 111111111111..222222222222 100644
+index 8b26a00..fb9c486 100644
 --- a/drivers/gpu/drm/meson/meson_encoder_cvbs.c
 +++ b/drivers/gpu/drm/meson/meson_encoder_cvbs.c
 @@ -11,6 +11,8 @@
@@ -83,7 +78,7 @@ index 111111111111..222222222222 100644
  struct meson_encoder_cvbs {
  	struct drm_encoder	encoder;
  	struct drm_bridge	bridge;
-@@ -88,11 +84,28 @@ static int meson_encoder_cvbs_attach(struct drm_bridge *bridge,
+@@ -87,11 +83,28 @@ static int meson_encoder_cvbs_attach(struct drm_bridge *bridge,
  {
  	struct meson_encoder_cvbs *meson_encoder_cvbs =
  					bridge_to_meson_encoder_cvbs(bridge);
@@ -93,7 +88,7 @@ index 111111111111..222222222222 100644
 +	if (ret)
 +		return ret;
  
- 	return drm_bridge_attach(encoder, meson_encoder_cvbs->next_bridge,
+ 	return drm_bridge_attach(encoder, meson_encoder_cvbs->bridge.next_bridge,
  				 &meson_encoder_cvbs->bridge, flags);
  }
  
@@ -112,7 +107,7 @@ index 111111111111..222222222222 100644
  static int meson_encoder_cvbs_get_modes(struct drm_bridge *bridge,
  					struct drm_connector *connector)
  {
-@@ -148,6 +161,7 @@ static void meson_encoder_cvbs_atomic_enable(struct drm_bridge *bridge,
+@@ -147,6 +160,7 @@ static void meson_encoder_cvbs_atomic_enable(struct drm_bridge *bridge,
  	struct drm_connector_state *conn_state;
  	struct drm_crtc_state *crtc_state;
  	struct drm_connector *connector;
@@ -120,7 +115,7 @@ index 111111111111..222222222222 100644
  
  	connector = drm_atomic_get_new_connector_for_encoder(state, bridge->encoder);
  	if (WARN_ON(!connector))
-@@ -177,16 +191,13 @@ static void meson_encoder_cvbs_atomic_enable(struct drm_bridge *bridge,
+@@ -176,16 +190,13 @@ static void meson_encoder_cvbs_atomic_enable(struct drm_bridge *bridge,
  	writel_bits_relaxed(VENC_VDAC_SEL_ATV_DMD, 0,
  			    priv->io_base + _REG(VENC_VDAC_DACSEL0));
  
@@ -144,7 +139,7 @@ index 111111111111..222222222222 100644
  	}
  }
  
-@@ -196,19 +207,22 @@ static void meson_encoder_cvbs_atomic_disable(struct drm_bridge *bridge,
+@@ -195,19 +206,22 @@ static void meson_encoder_cvbs_atomic_disable(struct drm_bridge *bridge,
  	struct meson_encoder_cvbs *meson_encoder_cvbs =
  					bridge_to_meson_encoder_cvbs(bridge);
  	struct meson_drm *priv = meson_encoder_cvbs->priv;
@@ -175,7 +170,7 @@ index 111111111111..222222222222 100644
  	.mode_valid = meson_encoder_cvbs_mode_valid,
  	.get_modes = meson_encoder_cvbs_get_modes,
  	.atomic_enable = meson_encoder_cvbs_atomic_enable,
-@@ -219,6 +233,54 @@ static const struct drm_bridge_funcs meson_encoder_cvbs_bridge_funcs = {
+@@ -218,6 +232,54 @@ static const struct drm_bridge_funcs meson_encoder_cvbs_bridge_funcs = {
  	.atomic_reset = drm_atomic_helper_bridge_reset,
  };
  
@@ -230,7 +225,7 @@ index 111111111111..222222222222 100644
  int meson_encoder_cvbs_probe(struct meson_drm *priv)
  {
  	struct drm_device *drm = priv->drm;
-@@ -255,6 +317,10 @@ int meson_encoder_cvbs_probe(struct meson_drm *priv)
+@@ -256,6 +318,10 @@ int meson_encoder_cvbs_probe(struct meson_drm *priv)
  
  	meson_encoder_cvbs->priv = priv;
  
@@ -241,7 +236,7 @@ index 111111111111..222222222222 100644
  	/* Encoder */
  	ret = drm_simple_encoder_init(priv->drm, &meson_encoder_cvbs->encoder,
  				      DRM_MODE_ENCODER_TVDAC);
-@@ -268,21 +334,27 @@ int meson_encoder_cvbs_probe(struct meson_drm *priv)
+@@ -269,19 +335,25 @@ int meson_encoder_cvbs_probe(struct meson_drm *priv)
  	ret = drm_bridge_attach(&meson_encoder_cvbs->encoder, &meson_encoder_cvbs->bridge, NULL,
  				DRM_BRIDGE_ATTACH_NO_CONNECTOR);
  	if (ret) {
@@ -262,8 +257,6 @@ index 111111111111..222222222222 100644
 +		goto err_unregister_cvbs_dac_pdev;
 +	}
  
- 	drm_connector_attach_encoder(connector, &meson_encoder_cvbs->encoder);
- 
  	priv->encoders[MESON_ENC_CVBS] = meson_encoder_cvbs;
  
  	return 0;
@@ -274,7 +267,7 @@ index 111111111111..222222222222 100644
  }
  
  void meson_encoder_cvbs_remove(struct meson_drm *priv)
-@@ -293,4 +365,6 @@ void meson_encoder_cvbs_remove(struct meson_drm *priv)
+@@ -292,4 +364,6 @@ void meson_encoder_cvbs_remove(struct meson_drm *priv)
  		meson_encoder_cvbs = priv->encoders[MESON_ENC_CVBS];
  		drm_bridge_remove(&meson_encoder_cvbs->bridge);
  	}
@@ -282,7 +275,7 @@ index 111111111111..222222222222 100644
 +	platform_device_unregister(priv->cvbs_dac_pdev);
  }
 diff --git a/drivers/gpu/drm/meson/meson_venc.c b/drivers/gpu/drm/meson/meson_venc.c
-index 111111111111..222222222222 100644
+index 4abd0c0..502e04f 100644
 --- a/drivers/gpu/drm/meson/meson_venc.c
 +++ b/drivers/gpu/drm/meson/meson_venc.c
 @@ -62,10 +62,6 @@
@@ -312,6 +305,3 @@ index 111111111111..222222222222 100644
  	/* Power Down Dacs */
  	writel_relaxed(0xff, priv->io_base + _REG(VENC_VDAC_SETTING));
  
--- 
-Armbian
-
