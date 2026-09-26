@@ -27,8 +27,8 @@ um a um.
 
 - 0091, 0092 pwm-regulator: o regulador PWM é o que dá a tensão da CPU
   (vcck) e do núcleo (vddee) na MXQ; o 0092 é um "FIXUP!" em andamento
-- 0093 clocks de CVBS e HDMI ativos ao mesmo tempo (em andamento)
 - 0080 mpll: muda o cálculo dos clocks derivados do MPLL
 
 Sem eles o 7.2 deu partida pelo SD na MXQ (raiz montada, systemd, login;
-SD sem avisos). O 0064 (HDMI) já voltou; os demais voltam um a um.
+SD sem avisos). O 0064 (HDMI) e o 0093 (clocks de vídeo) já voltaram; os demais voltam
+um a um.
