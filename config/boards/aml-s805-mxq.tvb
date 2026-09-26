@@ -38,7 +38,7 @@ function pre_umount_final_image__mxq_boot_scr_names() {
 #   ssv6xxx  SSV6051/SSV6256 SDIO Wi-Fi (firmware goes in with the rootfs)
 # A module that does not build only leaves a warning, so the image still
 # comes out; check the build log for "mxq module".
-declare -g MXQ_AMLNF_COMMIT="0dd91e48836915c32c3a1be2ea47bfe01ee85952"
+declare -g MXQ_AMLNF_COMMIT="5368c92134b548fb170ce0d7c2817a7b0a5b2e2e"
 declare -g MXQ_SSV6XXX_COMMIT="d9f2ee435bb313c98fe6e867e612129f721dc7df"
 function pre_package_kernel_image__mxq_extra_modules() {
 	declare extra="${tmp_kernel_install_dirs[INSTALL_MOD_PATH]}/lib/modules/${kernel_version_family}/extra"
@@ -51,12 +51,13 @@ function pre_package_kernel_image__mxq_extra_modules() {
 		rm -rf "${src}"
 		if git clone --quiet "https://github.com/eloirotava/${name}.git" "${src}" &&
 			git -C "${src}" checkout --quiet "${commit}" &&
-			run_kernel_make -C "${kernel_work_dir}" M="${src}" modules; then
+			run_kernel_make -C "${kernel_work_dir}" M="${src}" CONFIG_SSV6XXX=m modules &&
+			compgen -G "${src}/*.ko" > /dev/null; then
 			for ko in "${src}"/*.ko; do
-				run_host_command_logged "${KERNEL_COMPILER}strip" --strip-debug "${ko}"
-				run_host_command_logged install -m 0644 "${ko}" "${extra}/"
+				"${KERNEL_COMPILER}strip" --strip-debug "${ko}" || true
+				install -m 0644 "${ko}" "${extra}/"
 			done
-			display_alert "mxq module built" "${name} @ ${commit:0:7}" "info"
+			display_alert "mxq module built" "${name} @ ${commit:0:7}: $(cd "${src}" && ls ./*.ko)" "info"
 		else
 			display_alert "mxq module FAILED to build" "${name} @ ${commit:0:7}" "wrn"
 		fi
