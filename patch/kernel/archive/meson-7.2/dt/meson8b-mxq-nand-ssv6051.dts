@@ -7,10 +7,8 @@
  * the 32 kHz clock from xtal_32k_out.
  *
  * The SD card slot (port B, slot@1 in meson8b-mxq.dts) is on the same
- * controller, and meson-mx-sdio registers only the first slot it finds, so
- * this dtb gives the controller to the Wi-Fi and drops the card slot. Booting
- * from an SD card still works: that is done by the factory U-Boot, and the
- * SD image uses a dtb that keeps the slot.
+ * controller.  With the two-slot meson-mx-sdio both slots are registered and
+ * take turns on the controller, so the Wi-Fi and the card work together.
  */
 
 /dts-v1/;
@@ -20,8 +18,6 @@
 / {
 	model = "MXQ S805 (raw NAND, SSV6051)";
 };
-
-/delete-node/ &sd_card_slot;
 
 &pinctrl_cbus {
 	sd_a_pins: sd-a {
@@ -60,7 +56,7 @@
 };
 
 &sdio {
-	pinctrl-0 = <&sd_a_pins>, <&xtal_32k_out_pins>;
+	pinctrl-0 = <&sd_a_pins>, <&sd_b_pins>, <&xtal_32k_out_pins>;
 	pinctrl-names = "default";
 
 	wifi_slot: slot@0 {
