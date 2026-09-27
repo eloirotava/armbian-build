@@ -39,7 +39,7 @@ function pre_umount_final_image__mxq_boot_scr_names() {
 # A module that does not build only leaves a warning, so the image still
 # comes out; check the build log for "mxq module".
 declare -g MXQ_AMLNF_COMMIT="5368c92134b548fb170ce0d7c2817a7b0a5b2e2e"
-declare -g MXQ_SSV6XXX_COMMIT="e3fd605b848c899fb8d9134428a23677e2ce0ddc"
+declare -g MXQ_SSV6XXX_COMMIT="6f740973a6513b10b2a15fc527d0d5e80772dbd7"
 function pre_package_kernel_image__mxq_extra_modules() {
 	declare extra="${tmp_kernel_install_dirs[INSTALL_MOD_PATH]}/lib/modules/${kernel_version_family}/extra"
 	declare name commit src ko
@@ -84,6 +84,14 @@ function post_family_tweaks__mxq_nand_kit_and_firmware() {
 	# must carry it.
 	grep -qx meson-mx-sdio "${SDCARD}/etc/initramfs-tools/modules" 2> /dev/null ||
 		echo meson-mx-sdio >> "${SDCARD}/etc/initramfs-tools/modules"
+	# On 7.2 the ondemand governor stalls CPU0 for seconds while it moves
+	# the CPU clock (meson8b_cpu_clk_notifier_cb, under dbs_work_handler).
+	# Until that is fixed the CPU runs at a fixed clock.  The image has no
+	# cpufrequtils, so Armbian's GOVERNOR is not applied; set it at boot.
+	if [[ "${BRANCH}" == "edge" ]]; then
+		echo "w /sys/devices/system/cpu/cpufreq/policy0/scaling_governor - - - - performance" \
+			> "${SDCARD}/etc/tmpfiles.d/mxq-cpufreq.conf"
+	fi
 }
 
 # Booting from the SD card, use the NAND dtb on edge: it keeps the card slot
