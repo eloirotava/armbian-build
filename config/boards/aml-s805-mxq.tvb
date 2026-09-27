@@ -90,6 +90,8 @@ function post_family_tweaks__mxq_nand_kit_and_firmware() {
 # and adds the NAND controller, so grava-do-sd can reach the NAND.
 function pre_umount_final_image__mxq_sd_boots_nand_dtb() {
 	[[ "${BRANCH}" == "edge" ]] || return 0
-	run_host_command_logged sed -i "s|^dtb_file=.*|dtb_file=/dtb/meson8b-mxq-nand.dtb|" "${MOUNT}/boot/armbianEnv.txt"
-	run_host_command_logged grep -H dtb_file "${MOUNT}/boot/armbianEnv.txt"
+	# plain sed: run_host_command_logged joins its arguments into a shell line,
+	# and the "|" of the expression would become a pipe
+	sed -i "s|^dtb_file=.*|dtb_file=/dtb/meson8b-mxq-nand.dtb|" "${MOUNT}/boot/armbianEnv.txt"
+	display_alert "SD boots with" "$(grep dtb_file "${MOUNT}/boot/armbianEnv.txt")" "info"
 }
